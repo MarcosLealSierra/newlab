@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+#===============================================================================
+#    Newlab v1.1.12
+
+#    Developed by Marcos Leal Sierra <marcoslealsierra90@gmail.com>
+
+#    Copyright © 2016 Marcos Leal Sierra <marcoslealsierra90@gmail.com>
+#    License: GNU GPL version 3  <http://gnu.org/licenses/gpl.html>.
+#    This is free software: you are free to change and redistribute it.
+#    There is NO WARRANTY, to the extent permitted by law.
+#===============================================================================
+from os import chdir, system
+from sys import argv
+
+
+# Variables
+user = argv[1]
+
+ruta_jaula = '/home/jails/{}'.format(user)
+ruta_home = '{}/home/{u}'.format(ruta_jaula, u=user)
+ruta_app_jaula = '{}/{u}.laeci.org/application'.format(ruta_home, u=user)
+
+
+def leer_archivo(ruta):
+    """ Leer el contenido de un archivo y capturarlo
+
+    Params:
+        ruta -- (string) Ruta al archivo a leer
+
+    Returns:
+        contenido del archivo
+    """
+    with open(ruta, 'r') as archivo:
+        return archivo.read()
+
+
+def escribir_archivo(ruta, contenido):
+    """ Escribir en archivos
+
+    Params:
+        ruta -- (string) Ruta al archivo a escribir
+        contenido -- (string) Contenido a escribir en el archivo
+    """
+    with open(ruta, 'w') as archivo:
+        archivo.write(contenido)
+
+
+def eliminar_virtualhost():
+    """ Deshabilitar y elimnar el virtualhost del usuario"""
+    system('a2dissite {}.conf'.format(user))
+    system('rm {}.conf'.format(user))
+    system('service apache2 restart')
+
+
+def eliminar_user():
+    """ Eliminar usuario enjaulado"""
+    system('deluser {}'.format(user)) 
+
+
+def eliminar_jaula():
+    """ Eliminar jaula del usuario"""
+    system('rm -fr {}'.format(ruta_jaula))
+
+
+def reconfigurar_php():
+    """ Quitar el valor de la directiva de php.ini"""
+    archivo = '/etc/php5/apache2/php.ini'
+    contenido = leer_archivo(archivo)
+    final = contenido.replace('{}'.format(ruta_app_jaula + ':'), '')
+    escribir_archivo(archivo, final)
+
+
+def deshabilitar_usuario_ssh():
+    """ Deshabilitar acceso por ssh del usuario eliminado"""
+    archivo = '/etc/ssh/sshd_config'
+    contenido = leer_archivo(archivo)
+    final = contenido.replace('{} '.format(user), '')
+    escribir_archivo(archivo, final)
+
+
+def eliminar_usuario_sql():
+    """ Eliminar el usuario creado para MySQL"""
+    c = mysql -u root -pmysqlroot -e "DELETE FROM mysql.user WHERE user = '$1';"
+    system(c)
+
+
+def eliminar_base_datos():
+    """ Eliminar la base de datos creada para la jaula"""
+    system(mysql -u root -pmysqlroot -e "DROP DATABASE db_$1;")
+
+
+eliminar_virtualhost()
+eliminar_user()
+eliminar_jaula()
+reconfigurar_php()
+deshabilitar_usuario_ssh()
+eliminar_usuario_sql()
+eliminar_base_datos()

@@ -1,0 +1,9 @@
+Package: newlab
+Priority: extra
+Section: admin
+Maintainer: Marcos Leal Sierra <marcoslealsierra90@gmail.com>
+Version: 1.1.12
+Architecture: all
+Description: Creación de contenedores chroot personalizados con JailKit-2.17
+Build-Depends: build-essential (>=11.5)
+Depends: gcc (>=4:4.7.2-1)

@@ -1,0 +1,228 @@
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+#===============================================================================
+#    Newlab v1.1.12
+
+#    Developed by Marcos Leal Sierra <marcoslealsierra90@gmail.com>
+
+#    Copyright © 2016 Marcos Leal Sierra <marcoslealsierra90@gmail.com>
+#    License: GNU GPL version 3  <http://gnu.org/licenses/gpl.html>.
+#    This is free software: you are free to change and redistribute it.
+#    There is NO WARRANTY, to the extent permitted by law.
+#===============================================================================
+from os import system
+from sys import argv
+
+
+# Variables
+user = argv[1]
+lenguaje = argv[2]
+
+ruta_jaula = '/home/jails/{}'.format(user)
+ruta_home = '{}/home/{u}'.format(ruta_jaula, u=user)
+ruta_proyecto = '/srv/websites/{}.laeci.org'.format(user)
+ruta_app = '/srv/websites/{}.laeci.org/application'.format(user)
+ruta_logs = '/srv/websites/{}.laeci.org/logs'.format(user)
+ruta_app_jaula = '{}/{u}.laeci.org/application'.format(ruta_home, u=user)
+ruta_logs_jaula = '{}/{u}.laeci.org/logs'.format(ruta_home, u=user)
+
+
+def leer_archivo(ruta):
+    """ Leer el contenido de un archivo y capturarlo
+
+    Params:
+        ruta -- (string) Ruta al archivo a leer
+
+    Returns:
+        contenido del archivo
+    """
+    with open(ruta, 'r') as archivo:
+        return archivo.read()
+
+
+def escribir_archivo(ruta, contenido):
+    """ Escribir en archivos
+
+    Params:
+        ruta -- (string) Ruta al archivo a escribir
+        contenido -- (string) Contenido a escribir en el archivo
+    """
+    with open(ruta, 'w') as archivo:
+        archivo.write(contenido)
+
+
+def ejecutar_addlab():
+    """Ejecutar el comando addlab con los argumentos pasados en la ejecución
+    """
+    system('addlab {} {l}'.format(user, l=lenguaje))
+
+
+def limpiar_enlaces():
+    """Limpiar la estructura de la aplicación creada por addlab que son
+    enlaces simbólicos a /srv/websites
+    """
+    system('rm -fr /home/{}/*.laeci.org'.format(user))
+
+
+def crear_jaula():
+    """Crear la estructura de la jaula donde se encerrará al user
+    """
+    system('mkdir -p {}'.format(ruta_jaula))
+
+
+def habilitar_binarios():
+    """Copiar los binarios requeridos a la jaula para estar disponibles
+    en este entorno
+    """
+    binarios = ['python', 'ssh', 'uidbasics', 
+                'logbasics', 'clear', 'extendedshell']
+
+    for binario in binarios:
+        system('jk_init -vj {} {b}'.format(ruta_jaula, b=binario))
+
+
+def habilitar_bzr():
+    """Copiar los binarios de bazaar en la jaula para tener el programa
+    disponible
+    """
+    system('jk_cp {} bzr'.format(ruta_jaula))
+
+
+def habilitar_mysql():
+    """Copiar el binario de SQL en la jaula
+    """
+    system('cp /usr/bin/mysql {}/usr/bin/'.format(ruta_jaula))
+
+
+def habilitar_hostname():
+    """Copiar la libreria de resolución de nombres del sistema
+    """
+    system('jk_cp {} /lib/i386-linux-gnu/libnss_compat.so.2'.format(ruta_jaula))
+
+
+def asignar_jaula():
+    """ Asignar la jaula creada al usuario pasado por parámetro
+    """
+    system('jk_jailuser -s /bin/bash -m -j {} {u}'.format(ruta_jaula, u=user))
+
+
+def habilitar_clear_xtermcolor():
+    """Habilitar comando clear y configurar xterm-color como terminal de uso
+    para la correcta limpieza de pantalla y coloreado del prompt
+    """
+    system('cp /usr/bin/tput {}/usr/bin/'.format(ruta_jaula))
+
+    archivo = '{}/.bashrc'.format(ruta_home)
+
+    contenido = leer_archivo(archivo)
+    inicio = contenido.find('case "$TERM" in')
+    antes = contenido[:inicio]
+    despues = contenido[inicio:]
+    final = antes + 'export TERM=xterm-color\n' + despues
+
+    escribir_archivo(archivo, final)
+
+
+def mover_app():
+    """Copiar aplicación desde /srv a la jaula del usuario
+    """
+    system('mv {} {rh}/'.format(ruta_proyecto, rh=ruta_home))
+    if lenguaje == 'python':
+        system('mkdir -p /srv/websites/{}.laeci.org/public'.format(user))
+
+
+def configurar_virtualhost():
+    """Cambiar rutas en DocumentRoot, ErrorLog y CustomLog para que apunten a
+    la jaula del usuario
+    """
+    archivo = '/etc/apache2/sites-available/{}.conf'.format(user)
+
+    contenido = leer_archivo(archivo)
+    document_root = contenido.split(ruta_app)
+    document_root = ruta_app_jaula.join(document_root)
+
+    escribir_archivo(archivo, document_root)
+
+    contenido = leer_archivo(archivo)
+    error_log = contenido.split('{}/errors.log'.format(ruta_logs))
+    error_log = ('{}/errors.log'.format(ruta_logs_jaula)).join(error_log)
+
+    escribir_archivo(archivo, error_log)
+
+    contenido = leer_archivo(archivo)
+    cst_log = contenido.split('{}/access.log combined'.format(ruta_logs))
+    cst_log = ('{}/access.log combined'.format(ruta_logs_jaula)).join(cst_log)
+
+    escribir_archivo(archivo, cst_log)
+
+
+def reconfigurar_php():
+    """Cambiar directiva open_basedir php para que apunte a la ruta de la
+    aplicación en la jaula
+    """
+    archivo = '/etc/php5/apache2/php.ini'
+
+    contenido = leer_archivo(archivo)
+    inicio = contenido.find('open_basedir')
+    antes = contenido[0:inicio]
+    resto = contenido[inicio + len('open_basedir = '):]
+    valores_actuales = resto[0:resto.find('\n')]
+    despues = resto[len(valores_actuales):]
+    contenido_final = (antes + 'open_basedir = ' + ruta_app_jaula + ':' + 
+                       valores_actuales + despues)
+
+    escribir_archivo(archivo, contenido_final)
+
+
+def habilitar_user_ssh():
+    """ Habililitar al usuario que acceda mediante SSH
+    """
+    archivo = '/etc/ssh/sshd_config'
+    contenido = leer_archivo(archivo)
+
+    inicio = contenido.find('AllowUsers')
+    antes = contenido[0:inicio]
+    resto = contenido[inicio + len('AllowUsers'):]
+    valores_actuales = resto[0:]
+    contenido_final = (antes + 'AllowUsers ' + '{}'.format(user) + 
+                       valores_actuales)
+
+    escribir_archivo(archivo, contenido_final)
+
+
+def habilitar_acceso_rsa():
+    """Habilitar acceso del usuario por RSA
+    """
+    rsa = raw_input('Indique contenido llave RSA del nuevo usuario: ')
+
+    system('mkdir -p {}/.ssh'.format(ruta_home))
+    system('touch {}/.ssh/authorized_keys'.format(ruta_home))
+    system('chmod 700 {}/.ssh'.format(ruta_home))
+    system('chmod 600 {}/.ssh/authorized_keys'.format(ruta_home))
+    system('chown -R {u}:{u} {rh}'.format(u=user, rh=ruta_home))
+
+    escribir_archivo('{}/.ssh/authorized_keys'.format(ruta_home), rsa)
+
+
+def reiniciar_servicios():
+    """Reiniciar el servicio SSH y Apache
+    """
+    system('service ssh restart')
+    system('service apache2 restart')
+
+
+ejecutar_addlab()
+limpiar_enlaces()
+crear_jaula()
+habilitar_binarios()
+habilitar_bzr()
+habilitar_mysql()
+habilitar_hostname()
+asignar_jaula()
+habilitar_clear_xtermcolor()
+mover_app()
+configurar_virtualhost()
+reconfigurar_php()
+habilitar_user_ssh()
+habilitar_acceso_rsa()
+reiniciar_servicios()

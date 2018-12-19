@@ -1,0 +1,8 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from os import chdir, system
+
+
+system('mv /tmp/jk_init.ini /etc/jailkit/jk_init.ini')
+system('rm -fr /tmp/jailkit-2.17*')

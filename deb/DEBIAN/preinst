@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from os import chdir, system
+
+
+system('apt-get install gcc build-essential -y')
+
+chdir('/tmp')
+system('wget http://olivier.sessink.nl/jailkit/jailkit-2.17.tar.gz')
+system('tar -xzvf jailkit-2.17.tar.gz')
+chdir('jailkit-2.17')
+system('./configure')
+system('make')
+system('make install')
+
+system('mkdir /home/jails')
